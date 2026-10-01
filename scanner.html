@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Scanner QR Absensi Luring</title>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,"Segoe UI",Arial,sans-serif;background:#071a35;color:#eaf6ff;min-height:100vh}.wrap{max-width:760px;margin:auto;padding:18px 14px 40px}.card{background:#0a315f;border:1px solid rgba(193,232,255,.16);border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.28)}.head{padding:22px;background:linear-gradient(135deg,#0b3c78,#071a35)}.badge{display:inline-block;padding:7px 11px;border-radius:999px;background:rgba(193,232,255,.12);font-size:11px;font-weight:800}.head h1{margin:12px 0 5px;font-size:25px}.sub{color:#b8cde0;font-size:13px;line-height:1.5}.body{padding:20px}.scope{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.scope div{padding:12px;border:1px solid rgba(193,232,255,.14);background:#082950;border-radius:12px}.label{display:block;font-size:10px;color:#8faec8;text-transform:uppercase;font-weight:800;margin-bottom:4px}.value{font-weight:800}.reader{border-radius:16px;overflow:hidden;background:#020b18;border:1px solid rgba(193,232,255,.16);min-height:300px}.reader video{width:100%!important;height:auto!important}.status{margin-top:14px;padding:13px;border-radius:12px;font-size:12px;font-weight:800;line-height:1.5;background:#10365c;color:#bfe0ff}.ok{background:#123e28;color:#b6f3ca}.err{background:#4a1820;color:#ffc4c9}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.btn{border:0;border-radius:12px;padding:13px;font-weight:800;cursor:pointer;font-size:13px}.primary{background:#7da0ca;color:#021024}.secondary{background:#123e70;color:#eaf6ff;border:1px solid rgba(193,232,255,.16)}.btn:disabled{opacity:.5;cursor:not-allowed}.small{margin-top:13px;text-align:center;color:#89a5bc;font-size:11px;line-height:1.5}@media(max-width:560px){.scope,.actions{grid-template-columns:1fr}.head h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<div class="head"><span class="badge">▣ SCANNER QR</span><h1>Absensi Luring</h1><div class="sub">Scanner kamera berjalan di halaman HTTPS terpisah agar akses kamera tidak terblokir oleh sandbox Google Apps Script.</div></div>
+<div class="body">
+<div class="scope"><div><span class="label">Kelas</span><span class="value" id="kelas">-</span></div><div><span class="label">Jurusan</span><span class="value" id="jurusan">-</span></div></div>
+<div id="reader" class="reader"></div>
+<div class="actions"><button class="btn primary" id="start" onclick="startScanner()">▣ Mulai Scanner</button><button class="btn secondary" id="stop" onclick="stopScanner()" disabled>■ Tutup Kamera</button></div>
+<div id="status" class="status">Menyiapkan scanner...</div>
+<div class="small">QR siswa hanya berlaku untuk hari ini. Jangan bagikan link scanner guru kepada siswa.</div>
+</div></div></div>
+<script>
+(function(){
+const p=new URLSearchParams(location.search);
+const backend=p.get('backend')||''; const t=p.get('t')||''; const kelas=p.get('kelas')||''; const jurusan=p.get('jurusan')||''; const u=p.get('u')||''; const sig=p.get('sig')||'';
+const $=id=>document.getElementById(id); $('kelas').textContent=kelas||'-'; $('jurusan').textContent=jurusan||'-';
+let scanner=null,running=false,busy=false,last='',lastAt=0;
+function status(msg,type){$('status').textContent=msg;$('status').className='status '+(type||'')}
+function validate(){if(location.protocol!=='https:'){status('Scanner harus dibuka melalui HTTPS.','err');return false}if(!backend||!t||!kelas||!jurusan||!u||!sig){status('Link scanner tidak lengkap. Buat ulang link scanner dari aplikasi.','err');return false}if(!window.Html5Qrcode){status('Modul QR belum termuat. Periksa koneksi internet lalu muat ulang.','err');return false}return true}
+window.startScanner=function(){if(running||!validate())return;status('Meminta akses kamera...');navigator.mediaDevices?.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}).then(stream=>{stream.getTracks().forEach(x=>x.stop());return scannerStart()}).catch(e=>{let m=e&&e.name==='NotAllowedError'?'Kamera ditolak. Pastikan izin kamera untuk alamat scanner ini = Allow.':e&&e.name==='NotFoundError'?'Kamera tidak ditemukan.':'Kamera tidak dapat dibuka: '+(e&&e.message||e);status(m,'err')})};
+function scannerStart(){scanner=new Html5Qrcode('reader');return scanner.start({facingMode:{ideal:'environment'}},{fps:10,qrbox:(w,h)=>{const s=Math.floor(Math.min(w,h)*.68);return{width:s,height:s}},aspectRatio:1},onScan).then(()=>{running=true;$('start').disabled=true;$('stop').disabled=false;status('Kamera aktif. Arahkan QR siswa ke kotak scanner.','ok')}).catch(e=>{status('Scanner QR gagal dimulai: '+(e&&e.message||e),'err');try{scanner.clear()}catch(x){}scanner=null})}
+window.stopScanner=function(){const done=()=>{running=false;busy=false;scanner=null;$('start').disabled=false;$('stop').disabled=true;status('Kamera ditutup.')};if(scanner){scanner.stop().then(()=>{try{scanner.clear()}catch(e){}done()}).catch(done)}else done()};
+function onScan(text){text=String(text||'').trim();if(!text||busy)return;const now=Date.now();if(text===last&&now-lastAt<3000)return;last=text;lastAt=now;busy=true;status('QR terbaca. Menyimpan absensi...','ok');try{if(scanner)scanner.pause(true)}catch(e){}const url=backend+'?page=guru-scan-result&t='+encodeURIComponent(t)+'&kelas='+encodeURIComponent(kelas)+'&jurusan='+encodeURIComponent(jurusan)+'&u='+encodeURIComponent(u)+'&sig='+encodeURIComponent(sig)+'&qr='+encodeURIComponent(text);location.href=url}
+window.addEventListener('beforeunload',()=>{try{if(scanner)scanner.stop()}catch(e){}});
+status('Tekan Mulai Scanner untuk membuka kamera.');
+})();
+</script>
+</body></html>
