@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Absensi Siswa</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,"Segoe UI",Arial,sans-serif;background:#f1f5f9;color:#0f172a}
+.wrap{max-width:640px;margin:0 auto;padding:16px 14px 40px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 14px 40px rgba(15,23,42,.1);overflow:hidden}
+.head{padding:22px;color:#fff;background:linear-gradient(135deg,var(--theme),#0f172a)}
+.head h1{margin:8px 0 4px;font-size:24px}
+.head p{margin:0;font-size:13px;opacity:.88;line-height:1.5}
+.badge{display:inline-block;padding:6px 10px;border-radius:99px;background:rgba(255,255,255,.18);font-size:11px;font-weight:800}
+.body{padding:20px}
+.scope{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.scope div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px}
+.lbl{display:block;font-size:10px;color:#64748b;font-weight:800;text-transform:uppercase;margin-bottom:3px}
+.val{font-weight:800}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:13px;font-weight:800;margin-bottom:6px}
+select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font:inherit;background:#fff}
+.notice{padding:11px 13px;border-radius:12px;background:#f8fafc;font-size:12px;line-height:1.5;color:#475569;margin-bottom:14px}
+.cam{border:1px solid #dbe3ec;border-radius:14px;padding:12px;background:#f8fafc;margin-bottom:14px}
+.cam video,.cam img{width:100%;max-height:320px;object-fit:cover;border-radius:10px;background:#0f172a;display:none}
+.cam img{object-fit:contain}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.btn{width:100%;border:0;border-radius:12px;padding:12px;font-weight:800;color:#fff;background:var(--theme);cursor:pointer;font-size:14px}
+.btn.sec{background:#475569}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.help{font-size:11px;color:#64748b;margin-top:6px}
+.status{display:none;margin-top:14px;padding:12px;border-radius:12px;font-size:13px;font-weight:700;line-height:1.5}
+.status.show{display:block}
+.ok{background:#dcfce7;color:#166534}.err{background:#fee2e2;color:#991b1b}.info{background:#dbeafe;color:#1e40af}
+.hide{display:none!important}
+@media(max-width:520px){.scope{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card">
+  <div class="head">
+    <span class="badge" id="badge"></span>
+    <h1 id="title"></h1>
+    <p id="subtitle"></p>
+  </div>
+  <div class="body">
+    <div class="scope">
+      <div><span class="lbl">Tanggal</span><span class="val" id="tgl"></span></div>
+      <div><span class="lbl">Kelas</span><span class="val" id="kls"></span></div>
+      <div><span class="lbl">Jurusan</span><span class="val" id="jrs"></span></div>
+    </div>
+    <div class="notice" id="jamInfo">Memuat...</div>
+
+    <div class="fg"><label>1. Pilih NIS</label>
+      <select id="nisSel"><option value="">Memuat...</option></select></div>
+    <div class="fg"><label>2. Nama Peserta Didik</label>
+      <select id="namaSel" disabled><option value="">Pilih NIS dulu</option></select></div>
+
+    <!-- DARING: status -->
+    <div class="fg hide" id="statusBox"><label>3. Status Kehadiran</label>
+      <select id="statusSel"><option value="H">Hadir</option><option value="I">Izin</option><option value="S">Sakit</option></select></div>
+
+    <!-- Kamera: kartu (luring) / selfie (daring hadir) / surat (daring izin/sakit) -->
+    <div class="cam" id="cam-card"><strong id="camLabel-card">Foto kartu pelajar</strong>
+      <video id="video-card" autoplay playsinline muted></video><img id="img-card" alt="">
+      <div class="row"><button class="btn sec" id="start-card" type="button">📷 Aktifkan Kamera</button>
+      <button class="btn" id="snap-card" type="button" disabled>Ambil Foto</button></div>
+      <div class="help">Pastikan nama dan NIS pada kartu terlihat jelas.</div></div>
+
+    <div class="cam hide" id="cam-selfie"><strong>Foto selfie</strong>
+      <video id="video-selfie" autoplay playsinline muted></video><img id="img-selfie" alt="">
+      <div class="row"><button class="btn sec" id="start-selfie" type="button">📷 Aktifkan Kamera</button>
+      <button class="btn" id="snap-selfie" type="button" disabled>Ambil Foto</button></div></div>
+
+    <div class="cam hide" id="cam-letter"><strong>Foto surat izin/sakit</strong>
+      <video id="video-letter" autoplay playsinline muted></video><img id="img-letter" alt="">
+      <div class="row"><button class="btn sec" id="start-letter" type="button">📷 Aktifkan Kamera</button>
+      <button class="btn" id="snap-letter" type="button" disabled>Ambil Foto</button></div></div>
+
+    <div class="notice hide" id="locNotice"><strong>Verifikasi lokasi:</strong> izinkan lokasi saat diminta agar absensi luring diterima.</div>
+
+    <button class="btn" id="submitBtn" type="button" disabled>✓ Kirim Daftar Hadir</button>
+    <div class="status" id="status"></div>
+  </div>
+</div></div>
+<canvas id="canvas" style="display:none"></canvas>
+
+<script>
+/* ===== Parameter dari link ===== */
+const Q = new URLSearchParams(location.search);
+const BACKEND = Q.get('backend') || '';
+const MODE    = (Q.get('mode') || 'tm') === 'daring' ? 'Daring' : 'Tatap Muka';
+const TOKEN   = Q.get('t') || '';
+const TINGKAT = (Q.get('kelas') || '').toUpperCase();
+const JURUSAN = (Q.get('jurusan') || '').toUpperCase();
+const IS_DARING = MODE === 'Daring';
+
+const $ = id => document.getElementById(id);
+let students = [], selected = null;
+const photos = { card:'', selfie:'', letter:'' };
+let ocrText = '';
+const streams = {};
+
+/* ===== Tampilan awal ===== */
+document.documentElement.style.setProperty('--theme', IS_DARING ? '#7c3aed' : '#0f766e');
+$('badge').textContent = IS_DARING ? '💻 DARING' : '🏫 LURING';
+$('title').textContent = IS_DARING ? 'Absensi Daring' : 'Absensi Luring';
+$('subtitle').textContent = IS_DARING
+  ? 'Daftar hadir online. Pilih status lalu kirim bukti yang sesuai.'
+  : 'Daftar hadir tatap muka. Kartu pelajar dibaca sistem dan lokasi diverifikasi.';
+$('tgl').textContent = new Intl.DateTimeFormat('id-ID',{day:'2-digit',month:'long',year:'numeric'}).format(new Date());
+$('kls').textContent = TINGKAT; $('jrs').textContent = JURUSAN;
+
+if (IS_DARING) {
+  $('statusBox').classList.remove('hide');
+  $('cam-card').classList.add('hide');
+  $('cam-selfie').classList.remove('hide');
+} else {
+  $('locNotice').classList.remove('hide');
+}
+
+function status(msg, type){ const s=$('status'); s.textContent=msg; s.className='status show '+(type||'info'); }
+
+/* ===== Ambil daftar siswa dari Apps Script ===== */
+async function loadStudents(){
+  if(!BACKEND||!TOKEN||!TINGKAT||!JURUSAN){ status('Link tidak lengkap. Minta link/QR baru dari guru.','err'); return; }
+  try{
+    const url = BACKEND + '?page=api&action=students&mode=' + (IS_DARING?'daring':'tm') +
+      '&t=' + encodeURIComponent(TOKEN) + '&kelas=' + encodeURIComponent(TINGKAT) + '&jurusan=' + encodeURIComponent(JURUSAN);
+    const res = await fetch(url);
+    const j = await res.json();
+    if(!j.ok) throw new Error(j.message);
+    students = j.data || [];
+    if(j.settings) $('jamInfo').textContent = 'Jam masuk '+j.settings.jamMasuk+' • terlambat mulai '+j.settings.jamTerlambat+' • ditutup '+j.settings.jamTolak+'.';
+    const sel = $('nisSel');
+    sel.innerHTML = '<option value="">Pilih NIS</option>';
+    const seen = {};
+    students.forEach(s=>{
+      const n = String(s.nis||s.nisn||'').trim();
+      if(!n||seen[n]) return; seen[n]=1;
+      const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o);
+    });
+    if(!students.length) status('Tidak ada data peserta didik untuk kelas ini.','err');
+  }catch(e){
+    $('nisSel').innerHTML='<option value="">Gagal memuat</option>';
+    status(e.message||'Gagal memuat data siswa.','err');
+  }
+}
+
+$('nisSel').addEventListener('change', ()=>{
+  const nis = $('nisSel').value, name = $('namaSel');
+  const m = students.filter(s=>String(s.nis||s.nisn||'')===nis);
+  name.innerHTML='<option value="">Pilih nama</option>';
+  m.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.nama;name.appendChild(o);});
+  name.disabled=!m.length; selected=null; refresh();
+  if(m.length===1){name.value=m[0].id; name.dispatchEvent(new Event('change'));}
+});
+$('namaSel').addEventListener('change', ()=>{
+  selected = students.find(s=>String(s.id)===$('namaSel').value) || null; refresh();
+});
+$('statusSel').addEventListener('change', ()=>{
+  const st=$('statusSel').value;
+  $('cam-selfie').classList.toggle('hide', st!=='H');
+  $('cam-letter').classList.toggle('hide', st==='H');
+  if(st==='H'){ stopCam('letter'); photos.letter=''; $('img-letter').style.display='none'; }
+  else { stopCam('selfie'); photos.selfie=''; $('img-selfie').style.display='none'; }
+  refresh();
+});
+
+function neededPhoto(){
+  if(!IS_DARING) return 'card';
+  return $('statusSel').value==='H' ? 'selfie' : 'letter';
+}
+function refresh(){
+  const need = neededPhoto();
+  const ok = selected && photos[need] && (need!=='card' || ocrText);
+  $('submitBtn').disabled = !ok;
+}
+
+/* ===== Kamera ===== */
+async function startCam(type, facing){
+  try{
+    if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)
+      throw new Error('Browser tidak mendukung kamera. Buka link di Chrome/Edge/Safari terbaru.');
+    stopCam(type);
+    status('Meminta izin kamera...','info');
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:720}},audio:false});
+    streams[type]=stream;
+    const v=$('video-'+type); v.srcObject=stream; v.style.display='block';
+    $('img-'+type).style.display='none';
+    await v.play();
+    $('snap-'+type).disabled=false;
+    status('Kamera aktif. Arahkan lalu tekan Ambil Foto.','ok');
+  }catch(e){
+    stopCam(type);
+    const msg = e.name==='NotAllowedError' ? 'Akses kamera ditolak. Izinkan kamera di pengaturan browser untuk situs ini, lalu muat ulang.'
+      : e.name==='NotFoundError' ? 'Kamera tidak ditemukan di perangkat ini.'
+      : e.name==='NotReadableError' ? 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.'
+      : (e.message||'Kamera gagal dibuka.');
+    status(msg,'err');
+  }
+}
+function stopCam(type){
+  if(streams[type]){ streams[type].getTracks().forEach(t=>t.stop()); delete streams[type]; }
+  const v=$('video-'+type); if(v){ v.pause(); v.srcObject=null; v.style.display='none'; }
+  const b=$('snap-'+type); if(b) b.disabled=true;
+}
+async function snap(type){
+  try{
+    const v=$('video-'+type);
+    if(!v.srcObject||!v.videoWidth) throw new Error('Aktifkan kamera dan tunggu gambar muncul dulu.');
+    const c=$('canvas'), scale=Math.min(1,1280/v.videoWidth);
+    c.width=Math.round(v.videoWidth*scale); c.height=Math.round(v.videoHeight*scale);
+    const ctx=c.getContext('2d');
+    if(type==='selfie'){ctx.translate(c.width,0);ctx.scale(-1,1);}
+    ctx.drawImage(v,0,0,c.width,c.height);
+    const data=c.toDataURL('image/jpeg',0.86);
+    photos[type]=data;
+    const img=$('img-'+type); img.src=data; img.style.display='block';
+    stopCam(type);
+    if(type==='card'){
+      if(!window.Tesseract) throw new Error('Modul pembaca kartu belum termuat. Periksa internet lalu coba lagi.');
+      status('Membaca kartu pelajar...','info');
+      const r = await Tesseract.recognize(data,'eng',{logger:m=>{
+        if(m.status==='recognizing text'&&m.progress>0) status('Membaca kartu... '+Math.round(m.progress*100)+'%','info');
+      }});
+      ocrText = (r&&r.data&&r.data.text)||'';
+      if(!ocrText.trim()){ photos.card=''; img.style.display='none'; throw new Error('Tulisan kartu tidak terbaca. Foto ulang dengan cahaya cukup.'); }
+      status('Kartu terbaca. Data diverifikasi saat dikirim.','ok');
+    } else status('Foto berhasil diambil.','ok');
+    refresh();
+  }catch(e){
+    if(type==='card'){photos.card='';ocrText='';}
+    photos[type]=photos[type]||'';
+    status(e.message||'Gagal memproses foto.','err'); refresh();
+  }
+}
+$('start-card').onclick  = ()=>startCam('card','environment');
+$('start-selfie').onclick= ()=>startCam('selfie','user');
+$('start-letter').onclick= ()=>startCam('letter','environment');
+$('snap-card').onclick   = ()=>snap('card');
+$('snap-selfie').onclick = ()=>snap('selfie');
+$('snap-letter').onclick = ()=>snap('letter');
+
+/* ===== Kirim ===== */
+function getLocation(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation) return reject(new Error('Perangkat tidak mendukung lokasi.'));
+    navigator.geolocation.getCurrentPosition(
+      p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}),
+      ()=>reject(new Error('Izin lokasi diperlukan untuk absensi luring.')),
+      {enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  });
+}
+$('submitBtn').onclick = async ()=>{
+  const btn=$('submitBtn'); btn.disabled=true;
+  try{
+    let loc={lat:'',lng:'',acc:''};
+    if(!IS_DARING){ status('Memeriksa lokasi sekolah...','info'); loc=await getLocation(); }
+    status('Mengirim absensi...','info');
+    const st = IS_DARING ? $('statusSel').value : 'H';
+    const payload = {
+      mode:MODE, token:TOKEN, tingkat:TINGKAT, jurusan:JURUSAN,
+      studentId:selected.id, status:st,
+      latitude:loc.lat, longitude:loc.lng, accuracy:loc.acc,
+      cardBase64:photos.card, ocrText:ocrText,
+      selfieBase64:photos.selfie, letterBase64:photos.letter
+    };
+    const res = await fetch(BACKEND,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},   // penting: tanpa preflight CORS
+      body:JSON.stringify({action:'submitSelf',payload:payload})
+    });
+    const j = await res.json();
+    if(!j.ok) throw new Error(j.message||'Gagal mengirim.');
+    const r=j.result||{};
+    if(r.success){ status('✓ '+(r.message||'Absensi berhasil.'),'ok'); btn.textContent='✓ Sudah Terkirim'; }
+    else { status(r.message||'Absensi sudah tercatat.','err'); btn.disabled=false; }
+  }catch(e){
+    status(e.message||'Gagal mengirim absensi.','err'); btn.disabled=false;
+  }
+};
+
+loadStudents();
+</script>
+</body>
+</html>
