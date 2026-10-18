@@ -131,8 +131,9 @@ async function loadStudents(){
       '&t=' + encodeURIComponent(TOKEN) + '&kelas=' + encodeURIComponent(TINGKAT) + '&jurusan=' + encodeURIComponent(JURUSAN);
     const res = await fetch(url);
     const j = await res.json();
-    if(!j.ok) throw new Error(j.message);
-    students = j.data || [];
+    if(!(j.ok === true || j.success === true)) throw new Error(j.message || 'Server menolak permintaan daftar siswa.');
+    // Backend versi baru mengirim students; versi lama mengirim data.
+    students = Array.isArray(j.data) ? j.data : (Array.isArray(j.students) ? j.students : []);
     if(j.settings) $('jamInfo').textContent = 'Jam masuk '+j.settings.jamMasuk+' • terlambat mulai '+j.settings.jamTerlambat+' • ditutup '+j.settings.jamTolak+'.';
     const sel = $('nisSel');
     sel.innerHTML = '<option value="">Pilih NIS</option>';
@@ -151,7 +152,7 @@ async function loadStudents(){
 
 $('nisSel').addEventListener('change', ()=>{
   const nis = $('nisSel').value, name = $('namaSel');
-  const m = students.filter(s=>String(s.nis||s.nisn||'')===nis);
+  const m = students.filter(s=>String((s.nis||'').trim() || (s.nisn||'').trim())===String(nis).trim());
   name.innerHTML='<option value="">Pilih nama</option>';
   m.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.nama;name.appendChild(o);});
   name.disabled=!m.length; selected=null; refresh();
