@@ -134,18 +134,29 @@ async function loadStudents(){
     const j = await res.json();
     if(!(j.ok === true || j.success === true)) throw new Error(j.message || 'Server menolak permintaan daftar siswa.');
     // Backend versi baru mengirim students; versi lama mengirim data.
-    students = Array.isArray(j.data) ? j.data : (Array.isArray(j.students) ? j.students : []);
+    const rawStudents = Array.isArray(j.data) ? j.data : (Array.isArray(j.students) ? j.students : []);
+    students = rawStudents.map((s, index) => {
+      s = s || {};
+      const nis = String(s.nis || s.NIS || s['NIS Siswa'] || '').trim();
+      const nisn = String(s.nisn || s.NISN || s['NIS N'] || '').trim();
+      const nama = String(s.nama || s.NamaSiswa || s['Nama Siswa'] || s.Nama || '').trim();
+      const id = String(s.id || s.ID || nis || nisn || ('student-' + index)).trim();
+      return { ...s, id, nis, nisn, nama,
+        kelas: String(s.kelas || s.Kelas || '').trim().toUpperCase().replace(/^KELAS\s+/, ''),
+        jurusan: String(s.jurusan || s.Jurusan || '').trim().toUpperCase() };
+    }).filter(s => s.kelas === TINGKAT && s.jurusan === JURUSAN);
     if(j.settings) $('jamInfo').textContent = 'Jam masuk '+j.settings.jamMasuk+' • terlambat mulai '+j.settings.jamTerlambat+' • ditutup '+j.settings.jamTolak+'.';
     const sel = $('nisSel');
     sel.innerHTML = '<option value="">Pilih NIS</option>';
-    const seen = {};
+    const seen = new Set();
     students.forEach(s=>{
-      const n = String(s.nis||'').trim();
-      if(!n||seen[n]) return; seen[n]=1;
+      const n = String(s.nis || '').trim();
+      if(!n || seen.has(n)) return;
+      seen.add(n);
       const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o);
     });
-    if(!students.length) status('Tidak ada data peserta didik untuk kelas ini.','err');
-    else if(!students.some(s=>String(s.nis||'').trim())) status('Data siswa ditemukan, tetapi kolom NIS kosong. Lengkapi kolom NIS pada sheet DaftarSiswa.','err');
+    if(!students.length) status('Tidak ada data siswa yang cocok dengan kelas/jurusan ini. Periksa kolom Kelas, Jurusan, dan NIS pada sheet DaftarSiswa.','err');
+    else if(!students.some(s=>s.nis)) status('Data siswa ditemukan, tetapi NIS kosong. Lengkapi kolom NIS pada sheet DaftarSiswa.','err');
   }catch(e){
     $('nisSel').innerHTML='<option value="">Gagal memuat</option>';
     status(e.message||'Gagal memuat data siswa.','err');
@@ -156,12 +167,12 @@ $('nisSel').addEventListener('change', ()=>{
   const nis = $('nisSel').value, name = $('namaSel');
   const m = students.filter(s=>String(s.nis||'').trim()===String(nis).trim());
   name.innerHTML='<option value="">Pilih nama</option>';
-  m.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.nama;name.appendChild(o);});
+  m.forEach(s=>{const o=document.createElement('option');o.value=s.id || s.nis || s.nisn || s.nama;o.textContent=s.nama || '(Nama belum diisi)';name.appendChild(o);});
   name.disabled=!m.length; selected=null; refresh();
   if(m.length===1){name.value=m[0].id; name.dispatchEvent(new Event('change'));}
 });
 $('namaSel').addEventListener('change', ()=>{
-  selected = students.find(s=>String(s.id)===$('namaSel').value) || null; refresh();
+  selected = students.find(s=>String(s.id || s.nis || s.nisn || s.nama)===$('namaSel').value) || null; refresh();
 });
 $('statusSel').addEventListener('change', ()=>{
   const st=$('statusSel').value;
