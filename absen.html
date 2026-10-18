@@ -125,11 +125,12 @@ function status(msg, type){ const s=$('status'); s.textContent=msg; s.className=
 
 /* ===== Ambil daftar siswa dari Apps Script ===== */
 async function loadStudents(){
-  if(!BACKEND||!TOKEN||!TINGKAT||!JURUSAN){ status('Link tidak lengkap. Minta link/QR baru dari guru.','err'); return; }
+  if(!BACKEND||!/^https:\/\//i.test(BACKEND)||!TOKEN||!TINGKAT||!JURUSAN){ status('Link tidak lengkap atau backend bukan HTTPS. Minta link/QR baru dari guru.','err'); return; }
   try{
     const url = BACKEND + '?page=api&action=students&mode=' + (IS_DARING?'daring':'tm') +
       '&t=' + encodeURIComponent(TOKEN) + '&kelas=' + encodeURIComponent(TINGKAT) + '&jurusan=' + encodeURIComponent(JURUSAN);
-    const res = await fetch(url);
+    const res = await fetch(url, {method:'GET', cache:'no-store'});
+    if(!res.ok) throw new Error('Server gagal memuat daftar siswa (HTTP '+res.status+').');
     const j = await res.json();
     if(!(j.ok === true || j.success === true)) throw new Error(j.message || 'Server menolak permintaan daftar siswa.');
     // Backend versi baru mengirim students; versi lama mengirim data.
@@ -139,11 +140,12 @@ async function loadStudents(){
     sel.innerHTML = '<option value="">Pilih NIS</option>';
     const seen = {};
     students.forEach(s=>{
-      const n = String(s.nis||s.nisn||'').trim();
+      const n = String(s.nis||'').trim();
       if(!n||seen[n]) return; seen[n]=1;
       const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o);
     });
     if(!students.length) status('Tidak ada data peserta didik untuk kelas ini.','err');
+    else if(!students.some(s=>String(s.nis||'').trim())) status('Data siswa ditemukan, tetapi kolom NIS kosong. Lengkapi kolom NIS pada sheet DaftarSiswa.','err');
   }catch(e){
     $('nisSel').innerHTML='<option value="">Gagal memuat</option>';
     status(e.message||'Gagal memuat data siswa.','err');
@@ -152,7 +154,7 @@ async function loadStudents(){
 
 $('nisSel').addEventListener('change', ()=>{
   const nis = $('nisSel').value, name = $('namaSel');
-  const m = students.filter(s=>String((s.nis||'').trim() || (s.nisn||'').trim())===String(nis).trim());
+  const m = students.filter(s=>String(s.nis||'').trim()===String(nis).trim());
   name.innerHTML='<option value="">Pilih nama</option>';
   m.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.nama;name.appendChild(o);});
   name.disabled=!m.length; selected=null; refresh();
@@ -271,12 +273,13 @@ $('submitBtn').onclick = async ()=>{
     };
     const res = await fetch(BACKEND,{
       method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},   // penting: tanpa preflight CORS
+      headers:{'Content-Type':'text/plain;charset=utf-8'},   // simple request agar tidak memicu preflight CORS
       body:JSON.stringify({action:'submitSelf',payload:payload})
     });
+    if(!res.ok) throw new Error('Server gagal menerima absensi (HTTP '+res.status+').');
     const j = await res.json();
-    if(!j.ok) throw new Error(j.message||'Gagal mengirim.');
-    const r=j.result||{};
+    if(!(j.ok === true || j.success === true)) throw new Error(j.message||'Gagal mengirim absensi.');
+    const r=j.result || j;
     if(r.success){ status('✓ '+(r.message||'Absensi berhasil.'),'ok'); btn.textContent='✓ Sudah Terkirim'; }
     else { status(r.message||'Absensi sudah tercatat.','err'); btn.disabled=false; }
   }catch(e){
